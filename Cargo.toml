@@ -1,0 +1,46 @@
+[package]
+name = "httpmcp-rust"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A fast, simple, production-ready library for building MCP servers using Streamable HTTP"
+repository = "https://github.com/renaiss-ai/httpmcp-rust"
+documentation = "https://docs.rs/httpmcp-rust"
+readme = "README.md"
+keywords = ["mcp", "model-context-protocol", "server", "http", "sse"]
+categories = ["web-programming", "api-bindings"]
+rust-version = "1.70"
+
+[dependencies]
+# Web framework
+actix-web = "4"
+actix-web-lab = "0.22"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# OAuth 2.0
+oauth2 = "4.4"
+
+# Utilities
+uuid = { version = "1.0", features = ["v4", "serde"] }
+futures = "0.3"
+bytes = "1.0"
+http = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
