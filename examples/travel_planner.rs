@@ -9,7 +9,9 @@ async fn list_destinations(
     ctx: RequestContext,
 ) -> Result<(Vec<Resource>, Option<String>)> {
     let user = ctx.get_custom_header("x-user-id").unwrap_or_default();
-    tracing::info!("Listing travel resources for user: {}", user);
+    let country = ctx.get_custom_header("x-country-id").unwrap_or_default();
+    let auth_headers = ctx.get_custom_header("x-custom-auth-headers").unwrap_or_default();
+    tracing::info!("Listing travel resources - user: {}, country: {}, auth: {}", user, country, auth_headers);
 
     Ok((
         vec![
@@ -294,12 +296,13 @@ async fn main() -> std::io::Result<()> {
 
     println!("✈️  Travel Planner MCP Server");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("🌐 http://127.0.0.1:3001/mcp");
+    println!("🌐 http://127.0.0.1:8083/mcp");
     println!();
     println!("📚 Resources: destinations, guides");
     println!("🔧 Tools: flights, hotels, weather, budget, currency");
     println!("💡 Prompts: plan_trip, budget_advice");
+    println!("🔄 Custom headers: x-custom-auth-headers supported");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-    server.run("127.0.0.1:3001").await
+    server.run("127.0.0.1:8083").await
 }

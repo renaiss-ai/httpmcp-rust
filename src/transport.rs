@@ -20,10 +20,7 @@ pub fn create_app(cfg: &mut web::ServiceConfig, server: Arc<HttpMcpServer>) {
             HttpResponse::Ok()
                 .insert_header(("Access-Control-Allow-Origin", "*"))
                 .insert_header(("Access-Control-Allow-Methods", "GET, POST, OPTIONS"))
-                .insert_header((
-                    "Access-Control-Allow-Headers",
-                    "Content-Type, Authorization, Accept, Last-Event-ID, mcp-protocol-version",
-                ))
+                .insert_header(("Access-Control-Allow-Headers", "*"))
                 .finish()
         }));
     }
