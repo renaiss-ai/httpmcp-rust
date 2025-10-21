@@ -1,11 +1,13 @@
 use crate::auth::OAuthConfig;
 use crate::handler_types::{RegisteredPrompt, RegisteredResource, RegisteredTool};
+use crate::jsonrpc::JsonRpcResponse;
 use crate::metadata::{PromptMeta, ResourceMeta, ToolMeta};
 use crate::protocol::{Implementation, ServerCapabilities};
 use crate::transport::create_app;
 use actix_web::{middleware::Logger, App, HttpServer};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 /// Main HTTP MCP Server
 pub struct HttpMcpServer {
@@ -16,6 +18,7 @@ pub struct HttpMcpServer {
     pub(crate) prompts: HashMap<String, RegisteredPrompt>,
     pub(crate) oauth_config: Option<OAuthConfig>,
     pub(crate) enable_cors: bool,
+    pub(crate) response_tx: broadcast::Sender<JsonRpcResponse>,
 }
 
 impl HttpMcpServer {
@@ -192,6 +195,9 @@ impl HttpMcpServerBuilder {
             },
         };
 
+        // Create broadcast channel for SSE responses
+        let (response_tx, _) = broadcast::channel(100);
+
         Ok(HttpMcpServer {
             server_info: Implementation {
                 name: self.name,
@@ -203,6 +209,7 @@ impl HttpMcpServerBuilder {
             prompts: self.prompts,
             oauth_config: self.oauth_config,
             enable_cors: self.enable_cors,
+            response_tx,
         })
     }
 }

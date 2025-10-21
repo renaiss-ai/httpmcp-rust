@@ -10,7 +10,6 @@ use actix_web::{
     HttpRequest, HttpResponse, Responder,
 };
 use actix_web_lab::sse;
-use futures::stream;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -23,7 +22,7 @@ pub fn create_app(cfg: &mut web::ServiceConfig, server: Arc<HttpMcpServer>) {
                 .insert_header(("Access-Control-Allow-Methods", "GET, POST, OPTIONS"))
                 .insert_header((
                     "Access-Control-Allow-Headers",
-                    "Content-Type, Authorization, Accept, Last-Event-ID",
+                    "Content-Type, Authorization, Accept, Last-Event-ID, mcp-protocol-version",
                 ))
                 .finish()
         }));
@@ -51,9 +50,55 @@ async fn handle_post(
     // Validate JSON-RPC request
     body.validate()?;
 
+    // Check if this is a notification (no id field)
+    let is_notification = body.id.is_none();
+
+    // Check if client accepts SSE (streaming mode)
+    let accept_sse = req
+        .headers()
+        .get("accept")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.contains("text/event-stream"))
+        .unwrap_or(false);
+
+    // Route and execute the request
     let response = route_request(&body, &ctx, &server).await?;
 
-    Ok(HttpResponse::Ok().json(response))
+    // Notifications MUST NOT receive a response per JSON-RPC 2.0 spec
+    if is_notification {
+        tracing::debug!("Notification received ({}), returning 204 No Content", body.method);
+        let mut resp = HttpResponse::NoContent();
+        if server.enable_cors {
+            resp.insert_header(("Access-Control-Allow-Origin", "*"));
+        }
+        return Ok(resp.finish());
+    }
+
+    // For SSE mode, broadcast response and return 202 Accepted
+    if accept_sse {
+        let subscriber_count = server.response_tx.receiver_count();
+        tracing::debug!("Broadcasting response to {} subscribers", subscriber_count);
+
+        // If there are active SSE subscribers, send via broadcast
+        if subscriber_count > 0 {
+            let _ = server.response_tx.send(response);
+            let mut resp = HttpResponse::Accepted();
+            if server.enable_cors {
+                resp.insert_header(("Access-Control-Allow-Origin", "*"));
+            }
+            return Ok(resp.finish());
+        }
+
+        // If no subscribers, fallback to direct response
+        tracing::warn!("No SSE subscribers, falling back to direct HTTP response");
+    }
+
+    // For non-SSE mode or fallback, return JSON response directly
+    let mut resp = HttpResponse::Ok();
+    if server.enable_cors {
+        resp.insert_header(("Access-Control-Allow-Origin", "*"));
+    }
+    Ok(resp.json(response))
 }
 
 /// GET /mcp - SSE stream for server-to-client messages
@@ -73,10 +118,28 @@ async fn handle_get(req: HttpRequest, server: Data<Arc<HttpMcpServer>>) -> Resul
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    // Create SSE stream
-    let event_stream = stream::iter(vec![Ok::<_, actix_web::Error>(sse::Event::Data(
-        sse::Data::new("SSE stream connected").event("message"),
-    ))]);
+    // Subscribe to response broadcast channel
+    let mut rx = server.response_tx.subscribe();
+
+    tracing::debug!("SSE stream connected");
+
+    // Create SSE stream from broadcast channel
+    let event_stream = async_stream::stream! {
+        loop {
+            match rx.recv().await {
+                Ok(response) => {
+                    if let Ok(json) = serde_json::to_string(&response) {
+                        tracing::debug!("Sending response via SSE: {}", json);
+                        // Send as "message" event with the JSON-RPC response
+                        yield Ok::<_, actix_web::Error>(sse::Event::Data(
+                            sse::Data::new(json)
+                        ));
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    };
 
     Ok(sse::Sse::from_stream(event_stream))
 }
@@ -95,6 +158,9 @@ async fn route_request(
             handle_initialize(req, server.server_info.clone(), server.capabilities.clone())
         }
         "ping" => handle_ping(req),
+
+        // Notifications
+        "notifications/initialized" => handle_notifications_initialized(req),
 
         // Resources
         "resources/list" => handle_resources_list(req, ctx, server).await,
@@ -316,6 +382,16 @@ async fn handle_prompts_get(
 }
 
 // ============================================================================
+// Notification Handlers
+// ============================================================================
+
+fn handle_notifications_initialized(req: &JsonRpcRequest) -> Result<JsonRpcResponse> {
+    tracing::debug!("Client initialized notification received");
+    // Return empty object instead of null
+    Ok(JsonRpcResponse::success(serde_json::json!({}), req.id.clone()))
+}
+
+// ============================================================================
 // Logging Handlers
 // ============================================================================
 
@@ -325,7 +401,7 @@ fn handle_logging_set_level(req: &JsonRpcRequest) -> Result<JsonRpcResponse> {
             .map_err(|e| McpError::InvalidParams(format!("Invalid params: {}", e)))?;
 
     // TODO: Implement actual log level setting
-    Ok(JsonRpcResponse::success(Value::Null, req.id.clone()))
+    Ok(JsonRpcResponse::success(serde_json::json!({}), req.id.clone()))
 }
 
 // ============================================================================

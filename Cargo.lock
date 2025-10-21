@@ -937,6 +937,7 @@ dependencies = [
  "actix-web",
  "actix-web-lab",
  "anyhow",
+ "async-stream",
  "async-trait",
  "bytes",
  "futures",
