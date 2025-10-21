@@ -7,7 +7,7 @@ description = "A fast, simple, production-ready library for building MCP servers
 repository = "https://github.com/renaiss-ai/httpmcp-rust"
 documentation = "https://docs.rs/httpmcp-rust"
 readme = "README.md"
-keywords = ["mcp", "model-context-protocol", "server", "http", "sse"]
+keywords = ["mcp", "mcp-protocol", "server", "http", "sse"]
 categories = ["web-programming", "api-bindings"]
 rust-version = "1.70"
 
