@@ -6,18 +6,20 @@
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 
-A **fast**, **simple**, and **production-ready** Rust library for building MCP (Model Context Protocol) servers using Streamable HTTP.
+> ⚠️ **Beta Status**: This library is currently in beta. The API is still evolving and may have breaking changes. Not recommended for production use yet.
+
+A **fast** and **simple** Rust library for building MCP (Model Context Protocol) servers using Streamable HTTP.
 
 ## Features
 
 - ✅ **Simple API** - Function-based registration with builder pattern
 - ✅ **Fast** - Built on actix-web with async/await
-- ✅ **Production-ready** - OAuth 2.0, SSE with resumption, proper error handling
 - ✅ **Type-safe** - Strong typing throughout
 - ✅ **Extensible** - Easy to add custom resources, tools, and prompts
 - ✅ **Full MCP Support** - All protocol features (resources, tools, prompts, logging)
 - ✅ **Headers & Context** - Access request headers, remote IP, request ID
-- ✅ **Middleware** - Built-in CORS, validation, and custom middleware support
+- ✅ **Middleware** - Built-in CORS and OAuth 2.0 configuration
+- 🚧 **Beta Features** - SSE resumption, OAuth validation (in development)
 
 ## Quick Start
 
