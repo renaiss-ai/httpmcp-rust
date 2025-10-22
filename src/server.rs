@@ -1,7 +1,9 @@
 use crate::auth::OAuthConfig;
-use crate::handler_types::{RegisteredPrompt, RegisteredResource, RegisteredTool};
+use crate::handler_types::{
+    RegisteredEndpoint, RegisteredPrompt, RegisteredResource, RegisteredTool,
+};
 use crate::jsonrpc::JsonRpcResponse;
-use crate::metadata::{PromptMeta, ResourceMeta, ToolMeta};
+use crate::metadata::{EndpointMeta, PromptMeta, ResourceMeta, ToolMeta};
 use crate::protocol::{Implementation, ServerCapabilities};
 use crate::transport::create_app;
 use actix_web::{middleware::Logger, App, HttpServer};
@@ -16,6 +18,7 @@ pub struct HttpMcpServer {
     pub(crate) tools: HashMap<String, RegisteredTool>,
     pub(crate) resources: HashMap<String, RegisteredResource>,
     pub(crate) prompts: HashMap<String, RegisteredPrompt>,
+    pub(crate) endpoints: Vec<RegisteredEndpoint>,
     pub(crate) oauth_config: Option<OAuthConfig>,
     pub(crate) enable_cors: bool,
     pub(crate) response_tx: broadcast::Sender<JsonRpcResponse>,
@@ -52,6 +55,7 @@ pub struct HttpMcpServerBuilder {
     tools: HashMap<String, RegisteredTool>,
     resources: HashMap<String, RegisteredResource>,
     prompts: HashMap<String, RegisteredPrompt>,
+    endpoints: Vec<RegisteredEndpoint>,
     oauth_config: Option<OAuthConfig>,
     enable_cors: bool,
 }
@@ -64,6 +68,7 @@ impl HttpMcpServerBuilder {
             tools: HashMap::new(),
             resources: HashMap::new(),
             prompts: HashMap::new(),
+            endpoints: Vec::new(),
             oauth_config: None,
             enable_cors: true,
         }
@@ -153,6 +158,27 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Register a custom HTTP endpoint
+    pub fn endpoint<F, Fut>(mut self, meta: EndpointMeta, handler: F) -> Self
+    where
+        F: Fn(crate::context::RequestContext, Option<serde_json::Value>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: std::future::Future<Output = crate::error::Result<actix_web::HttpResponse>>
+            + Send
+            + 'static,
+    {
+        let endpoint = RegisteredEndpoint {
+            route: meta.get_route().to_string(),
+            method: meta.get_method().to_string(),
+            description: meta.get_description().map(|s| s.to_string()),
+            handler: std::sync::Arc::new(move |ctx, body| Box::pin(handler(ctx, body))),
+        };
+        self.endpoints.push(endpoint);
+        self
+    }
+
     /// Configure OAuth 2.0
     pub fn with_oauth(
         mut self,
@@ -207,6 +233,7 @@ impl HttpMcpServerBuilder {
             tools: self.tools,
             resources: self.resources,
             prompts: self.prompts,
+            endpoints: self.endpoints,
             oauth_config: self.oauth_config,
             enable_cors: self.enable_cors,
             response_tx,

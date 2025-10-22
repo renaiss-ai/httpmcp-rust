@@ -203,3 +203,54 @@ impl Default for PromptMeta {
         Self::new()
     }
 }
+
+/// Metadata builder for endpoints
+#[derive(Debug, Clone)]
+pub struct EndpointMeta {
+    route: String,
+    method: String,
+    description: Option<String>,
+}
+
+impl EndpointMeta {
+    pub fn new() -> Self {
+        Self {
+            route: String::new(),
+            method: "GET".to_string(),
+            description: None,
+        }
+    }
+
+    pub fn route(mut self, route: impl Into<String>) -> Self {
+        self.route = route.into();
+        self
+    }
+
+    pub fn method(mut self, method: impl Into<String>) -> Self {
+        self.method = method.into().to_uppercase();
+        self
+    }
+
+    pub fn description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
+    pub fn get_route(&self) -> &str {
+        &self.route
+    }
+
+    pub fn get_method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+}
+
+impl Default for EndpointMeta {
+    fn default() -> Self {
+        Self::new()
+    }
+}

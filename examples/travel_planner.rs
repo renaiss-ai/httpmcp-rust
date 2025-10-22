@@ -1,5 +1,8 @@
+use actix_web::HttpResponse;
 use httpmcp_rust::protocol::*;
-use httpmcp_rust::{HttpMcpServer, PromptMeta, RequestContext, ResourceMeta, Result, ToolMeta};
+use httpmcp_rust::{
+    EndpointMeta, HttpMcpServer, PromptMeta, RequestContext, ResourceMeta, Result, ToolMeta,
+};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -10,8 +13,15 @@ async fn list_destinations(
 ) -> Result<(Vec<Resource>, Option<String>)> {
     let user = ctx.get_custom_header("x-user-id").unwrap_or_default();
     let country = ctx.get_custom_header("x-country-id").unwrap_or_default();
-    let auth_headers = ctx.get_custom_header("x-custom-auth-headers").unwrap_or_default();
-    tracing::info!("Listing travel resources - user: {}, country: {}, auth: {}", user, country, auth_headers);
+    let auth_headers = ctx
+        .get_custom_header("x-custom-auth-headers")
+        .unwrap_or_default();
+    tracing::info!(
+        "Listing travel resources - user: {}, country: {}, auth: {}",
+        user,
+        country,
+        auth_headers
+    );
 
     Ok((
         vec![
@@ -290,6 +300,20 @@ async fn main() -> std::io::Result<()> {
                 .arg("budget", "Total budget", true),
             budget_advice_prompt,
         )
+        // Health endpoint
+        .endpoint(
+            EndpointMeta::new()
+                .route("/health")
+                .method("GET")
+                .description("Health check endpoint"),
+            |_ctx: RequestContext, _body| async move {
+                Ok(HttpResponse::Ok().json(json!({
+                    "status": "healthy",
+                    "service": "travel-planner-mcp",
+                    "version": "1.0.0"
+                })))
+            },
+        )
         .enable_cors(true)
         .build()
         .expect("Failed to build server");
@@ -297,6 +321,7 @@ async fn main() -> std::io::Result<()> {
     println!("✈️  Travel Planner MCP Server");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("🌐 http://127.0.0.1:8083/mcp");
+    println!("🏥 http://127.0.0.1:8083/health");
     println!();
     println!("📚 Resources: destinations, guides");
     println!("🔧 Tools: flights, hotels, weather, budget, currency");

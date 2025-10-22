@@ -17,6 +17,7 @@ A **fast** and **simple** Rust library for building MCP (Model Context Protocol)
 - ✅ **Type-safe** - Strong typing throughout
 - ✅ **Extensible** - Easy to add custom resources, tools, and prompts
 - ✅ **Full MCP Support** - All protocol features (resources, tools, prompts, logging)
+- ✅ **Custom HTTP Endpoints** - Add REST API endpoints on the same port as MCP
 - ✅ **Headers & Context** - Access request headers, remote IP, request ID
 - ✅ **Middleware** - Built-in CORS and OAuth 2.0 configuration
 - 🚧 **Beta Features** - SSE resumption, OAuth validation (in development)
@@ -215,6 +216,69 @@ async fn code_review_prompt(
 }
 ```
 
+#### Custom HTTP Endpoint Handlers
+
+Add REST API endpoints alongside MCP protocol on the same port:
+
+```rust
+use httpmcp_rust::{EndpointMeta, HttpMcpServer, RequestContext, Result};
+use actix_web::HttpResponse;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
+    HttpMcpServer::builder()
+        .name("my-server")
+        .version("1.0.0")
+        // Add custom GET endpoint
+        .endpoint(
+            EndpointMeta::new()
+                .route("/health")
+                .method("GET")
+                .description("Health check endpoint"),
+            |_ctx: RequestContext, _body| async move {
+                Ok(HttpResponse::Ok().json(json!({
+                    "status": "healthy",
+                    "version": "1.0.0"
+                })))
+            },
+        )
+        // Add custom POST endpoint
+        .endpoint(
+            EndpointMeta::new()
+                .route("/api/data")
+                .method("POST")
+                .description("Create data"),
+            |_ctx: RequestContext, body| async move {
+                Ok(HttpResponse::Created().json(json!({
+                    "message": "Created successfully",
+                    "data": body
+                })))
+            },
+        )
+        .build()?
+        .run("127.0.0.1:8080")
+        .await
+}
+```
+
+Test custom endpoints:
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# POST data
+curl -X POST http://localhost:8080/api/data \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test"}'
+
+# MCP protocol still works on /mcp
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+```
+
 ### Request Context
 
 Access headers and request metadata in all handlers:
@@ -364,6 +428,12 @@ curl -X POST http://localhost:8080/mcp \
 - Resources: destinations, itineraries, bookings, guides
 - Tools: flight search, hotel search, weather, budget calculator, currency converter
 - Prompts: trip planning, budget advice, packing lists
+- Includes custom health endpoint
+
+**4. Endpoint Example** (`endpoint_example.rs`)
+- Custom HTTP REST API endpoints
+- Health check, user list, data creation endpoints
+- Shows how to mix MCP protocol with custom REST APIs on the same port
 
 ### Run Examples
 
@@ -376,6 +446,9 @@ cargo run --example full_server
 
 # Travel planner (recommended to see full capabilities)
 cargo run --example travel_planner
+
+# Endpoint example (custom REST API + MCP)
+cargo run --example endpoint_example
 
 # Test travel planner with automated suite
 ./examples/travel_planner_test.sh

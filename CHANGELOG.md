@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-01-22
+
+### Added
+- **Custom HTTP Endpoints**: New `.endpoint()` builder method to register REST API endpoints alongside MCP protocol
+- `EndpointMeta` metadata builder for configuring custom routes, HTTP methods, and descriptions
+- Dynamic route registration supporting GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+- `endpoint_example.rs` demonstrating health checks and custom REST API endpoints
+- Health endpoint added to `travel_planner.rs` example
+- Custom endpoints share the same port as MCP protocol endpoints
+- CORS support for custom endpoints with configurable methods
+
+### Changed
+- Updated `transport.rs` to dynamically register custom endpoint routes during app configuration
+- Extended `HttpMcpServer` to store and manage custom endpoints
+- Added `actix_web::HttpResponse` as return type for endpoint handlers
+
+### Technical Details
+- Endpoint handlers use `Arc` for thread-safe sharing across workers
+- Endpoints have access to `RequestContext` for headers and metadata
+- OAuth validation automatically applies to custom endpoints when configured
+- All custom endpoints integrate seamlessly with existing CORS middleware
+
 ## [0.1.0] - 2025-01-XX
 
 ### Added

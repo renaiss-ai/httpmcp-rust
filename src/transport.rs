@@ -19,7 +19,10 @@ pub fn create_app(cfg: &mut web::ServiceConfig, server: Arc<HttpMcpServer>) {
         cfg.default_service(web::to(|| async {
             HttpResponse::Ok()
                 .insert_header(("Access-Control-Allow-Origin", "*"))
-                .insert_header(("Access-Control-Allow-Methods", "GET, POST, OPTIONS"))
+                .insert_header((
+                    "Access-Control-Allow-Methods",
+                    "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                ))
                 .insert_header(("Access-Control-Allow-Headers", "*"))
                 .finish()
         }));
@@ -28,6 +31,62 @@ pub fn create_app(cfg: &mut web::ServiceConfig, server: Arc<HttpMcpServer>) {
     cfg.app_data(Data::new(server.clone()))
         .service(handle_post)
         .service(handle_get);
+
+    // Register custom endpoints dynamically
+    for endpoint in &server.endpoints {
+        let route = endpoint.route.clone();
+        let method = endpoint.method.clone();
+        let handler = endpoint.handler.clone();
+        let server_clone = server.clone();
+
+        cfg.route(
+            &route,
+            web::method(parse_http_method(&method)).to(
+                move |req: HttpRequest, body: Option<web::Json<Value>>| {
+                    let handler = handler.clone();
+                    let server_clone = server_clone.clone();
+                    async move {
+                        let ctx = create_request_context(&req);
+
+                        // Validate OAuth if configured
+                        if let Some(oauth) = &server_clone.oauth_config {
+                            if let Err(e) = oauth.validate_token(&ctx).await {
+                                return Ok::<HttpResponse, actix_web::Error>(
+                                    HttpResponse::Unauthorized().json(serde_json::json!({
+                                        "error": e.to_string()
+                                    })),
+                                );
+                            }
+                        }
+
+                        let body_value = body.map(|json| json.into_inner());
+                        match handler(ctx, body_value).await {
+                            Ok(response) => Ok(response),
+                            Err(e) => {
+                                Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                                    "error": e.to_string()
+                                })))
+                            }
+                        }
+                    }
+                },
+            ),
+        );
+    }
+}
+
+/// Parse HTTP method string to actix-web Method
+fn parse_http_method(method: &str) -> actix_web::http::Method {
+    match method.to_uppercase().as_str() {
+        "GET" => actix_web::http::Method::GET,
+        "POST" => actix_web::http::Method::POST,
+        "PUT" => actix_web::http::Method::PUT,
+        "DELETE" => actix_web::http::Method::DELETE,
+        "PATCH" => actix_web::http::Method::PATCH,
+        "HEAD" => actix_web::http::Method::HEAD,
+        "OPTIONS" => actix_web::http::Method::OPTIONS,
+        _ => actix_web::http::Method::GET,
+    }
 }
 
 /// POST /mcp - Handle JSON-RPC requests
@@ -63,7 +122,10 @@ async fn handle_post(
 
     // Notifications MUST NOT receive a response per JSON-RPC 2.0 spec
     if is_notification {
-        tracing::debug!("Notification received ({}), returning 204 No Content", body.method);
+        tracing::debug!(
+            "Notification received ({}), returning 204 No Content",
+            body.method
+        );
         let mut resp = HttpResponse::NoContent();
         if server.enable_cors {
             resp.insert_header(("Access-Control-Allow-Origin", "*"));
@@ -122,18 +184,13 @@ async fn handle_get(req: HttpRequest, server: Data<Arc<HttpMcpServer>>) -> Resul
 
     // Create SSE stream from broadcast channel
     let event_stream = async_stream::stream! {
-        loop {
-            match rx.recv().await {
-                Ok(response) => {
-                    if let Ok(json) = serde_json::to_string(&response) {
-                        tracing::debug!("Sending response via SSE: {}", json);
-                        // Send as "message" event with the JSON-RPC response
-                        yield Ok::<_, actix_web::Error>(sse::Event::Data(
-                            sse::Data::new(json)
-                        ));
-                    }
-                }
-                Err(_) => break,
+        while let Ok(response) = rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&response) {
+                tracing::debug!("Sending response via SSE: {}", json);
+                // Send as "message" event with the JSON-RPC response
+                yield Ok::<_, actix_web::Error>(sse::Event::Data(
+                    sse::Data::new(json)
+                ));
             }
         }
     };
@@ -385,7 +442,10 @@ async fn handle_prompts_get(
 fn handle_notifications_initialized(req: &JsonRpcRequest) -> Result<JsonRpcResponse> {
     tracing::debug!("Client initialized notification received");
     // Return empty object instead of null
-    Ok(JsonRpcResponse::success(serde_json::json!({}), req.id.clone()))
+    Ok(JsonRpcResponse::success(
+        serde_json::json!({}),
+        req.id.clone(),
+    ))
 }
 
 // ============================================================================
@@ -398,7 +458,10 @@ fn handle_logging_set_level(req: &JsonRpcRequest) -> Result<JsonRpcResponse> {
             .map_err(|e| McpError::InvalidParams(format!("Invalid params: {}", e)))?;
 
     // TODO: Implement actual log level setting
-    Ok(JsonRpcResponse::success(serde_json::json!({}), req.id.clone()))
+    Ok(JsonRpcResponse::success(
+        serde_json::json!({}),
+        req.id.clone(),
+    ))
 }
 
 // ============================================================================

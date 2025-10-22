@@ -86,7 +86,7 @@ pub mod transport;
 // Re-export commonly used types
 pub use context::RequestContext;
 pub use error::{McpError, Result};
-pub use metadata::{PromptMeta, ResourceMeta, ToolMeta};
+pub use metadata::{EndpointMeta, PromptMeta, ResourceMeta, ToolMeta};
 pub use server::{HttpMcpServer, HttpMcpServerBuilder};
 
 // Re-export protocol types

@@ -1,9 +1,11 @@
 use crate::context::RequestContext;
 use crate::error::Result;
 use crate::protocol::*;
+use actix_web::HttpResponse;
 use futures::future::BoxFuture;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Tool handler function signature
 pub type ToolHandler = Box<
@@ -40,6 +42,11 @@ pub type PromptHandler = Box<
         + Sync,
 >;
 
+/// Endpoint handler function signature
+pub type EndpointHandler = Arc<
+    dyn Fn(RequestContext, Option<Value>) -> BoxFuture<'static, Result<HttpResponse>> + Send + Sync,
+>;
+
 /// Registered tool
 pub struct RegisteredTool {
     pub meta: Tool,
@@ -57,4 +64,12 @@ pub struct RegisteredResource {
 pub struct RegisteredPrompt {
     pub meta: Prompt,
     pub handler: PromptHandler,
+}
+
+/// Registered endpoint
+pub struct RegisteredEndpoint {
+    pub route: String,
+    pub method: String,
+    pub description: Option<String>,
+    pub handler: EndpointHandler,
 }
