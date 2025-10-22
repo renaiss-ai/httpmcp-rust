@@ -1,6 +1,7 @@
 use crate::auth::OAuthConfig;
 use crate::handler_types::{
-    RegisteredEndpoint, RegisteredPrompt, RegisteredResource, RegisteredTool,
+    RegisteredEndpoint, RegisteredMultipartEndpoint, RegisteredPrompt, RegisteredResource,
+    RegisteredTool,
 };
 use crate::jsonrpc::JsonRpcResponse;
 use crate::metadata::{EndpointMeta, PromptMeta, ResourceMeta, ToolMeta};
@@ -19,6 +20,7 @@ pub struct HttpMcpServer {
     pub(crate) resources: HashMap<String, RegisteredResource>,
     pub(crate) prompts: HashMap<String, RegisteredPrompt>,
     pub(crate) endpoints: Vec<RegisteredEndpoint>,
+    pub(crate) multipart_endpoints: Vec<RegisteredMultipartEndpoint>,
     pub(crate) oauth_config: Option<OAuthConfig>,
     pub(crate) enable_cors: bool,
     pub(crate) response_tx: broadcast::Sender<JsonRpcResponse>,
@@ -56,6 +58,7 @@ pub struct HttpMcpServerBuilder {
     resources: HashMap<String, RegisteredResource>,
     prompts: HashMap<String, RegisteredPrompt>,
     endpoints: Vec<RegisteredEndpoint>,
+    multipart_endpoints: Vec<RegisteredMultipartEndpoint>,
     oauth_config: Option<OAuthConfig>,
     enable_cors: bool,
 }
@@ -69,6 +72,7 @@ impl HttpMcpServerBuilder {
             resources: HashMap::new(),
             prompts: HashMap::new(),
             endpoints: Vec::new(),
+            multipart_endpoints: Vec::new(),
             oauth_config: None,
             enable_cors: true,
         }
@@ -179,6 +183,36 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Register a custom multipart HTTP endpoint for file uploads
+    pub fn multipart_endpoint<F, Fut>(mut self, meta: EndpointMeta, handler: F) -> Self
+    where
+        F: Fn(crate::context::RequestContext, actix_multipart::Multipart) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: std::future::Future<Output = crate::error::Result<actix_web::HttpResponse>> + 'static,
+    {
+        let handler = std::sync::Arc::new(handler);
+        let endpoint = RegisteredMultipartEndpoint {
+            route: meta.get_route().to_string(),
+            method: meta.get_method().to_string(),
+            description: meta.get_description().map(|s| s.to_string()),
+            handler: std::sync::Arc::new(move |ctx, multipart| {
+                let handler = handler.clone();
+                Box::pin(async move { handler(ctx, multipart).await })
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<
+                                Output = crate::error::Result<actix_web::HttpResponse>,
+                            >,
+                        >,
+                    >
+            }),
+        };
+        self.multipart_endpoints.push(endpoint);
+        self
+    }
+
     /// Configure OAuth 2.0
     pub fn with_oauth(
         mut self,
@@ -234,6 +268,7 @@ impl HttpMcpServerBuilder {
             resources: self.resources,
             prompts: self.prompts,
             endpoints: self.endpoints,
+            multipart_endpoints: self.multipart_endpoints,
             oauth_config: self.oauth_config,
             enable_cors: self.enable_cors,
             response_tx,

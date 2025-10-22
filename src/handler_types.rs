@@ -1,6 +1,7 @@
 use crate::context::RequestContext;
 use crate::error::Result;
 use crate::protocol::*;
+use actix_multipart::Multipart;
 use actix_web::HttpResponse;
 use futures::future::BoxFuture;
 use serde_json::Value;
@@ -47,6 +48,18 @@ pub type EndpointHandler = Arc<
     dyn Fn(RequestContext, Option<Value>) -> BoxFuture<'static, Result<HttpResponse>> + Send + Sync,
 >;
 
+/// Multipart endpoint handler function signature
+/// Note: Multipart streams are not Send, so they must be processed immediately
+/// The returned future does not need to be Send as it's processed on the same task
+pub type MultipartEndpointHandler = Arc<
+    dyn Fn(
+            RequestContext,
+            Multipart,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HttpResponse>>>>
+        + Send
+        + Sync,
+>;
+
 /// Registered tool
 pub struct RegisteredTool {
     pub meta: Tool,
@@ -72,4 +85,12 @@ pub struct RegisteredEndpoint {
     pub method: String,
     pub description: Option<String>,
     pub handler: EndpointHandler,
+}
+
+/// Registered multipart endpoint
+pub struct RegisteredMultipartEndpoint {
+    pub route: String,
+    pub method: String,
+    pub description: Option<String>,
+    pub handler: MultipartEndpointHandler,
 }

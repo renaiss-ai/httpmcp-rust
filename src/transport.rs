@@ -4,6 +4,7 @@ use crate::handlers::lifecycle::{handle_initialize, handle_ping};
 use crate::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::protocol::*;
 use crate::server::HttpMcpServer;
+use actix_multipart::Multipart;
 use actix_web::{
     get, post,
     web::{self, Data},
@@ -61,6 +62,48 @@ pub fn create_app(cfg: &mut web::ServiceConfig, server: Arc<HttpMcpServer>) {
 
                         let body_value = body.map(|json| json.into_inner());
                         match handler(ctx, body_value).await {
+                            Ok(response) => Ok(response),
+                            Err(e) => {
+                                Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                                    "error": e.to_string()
+                                })))
+                            }
+                        }
+                    }
+                },
+            ),
+        );
+    }
+
+    // Register multipart endpoints dynamically
+    for endpoint in &server.multipart_endpoints {
+        let route = endpoint.route.clone();
+        let method = endpoint.method.clone();
+        let handler = endpoint.handler.clone();
+        let server_clone = server.clone();
+
+        cfg.route(
+            &route,
+            web::method(parse_http_method(&method)).to(
+                move |req: HttpRequest, multipart: Multipart| {
+                    let handler = handler.clone();
+                    let server_clone = server_clone.clone();
+                    let ctx = create_request_context(&req);
+
+                    async move {
+                        // Validate OAuth if configured
+                        if let Some(oauth) = &server_clone.oauth_config {
+                            if let Err(e) = oauth.validate_token(&ctx).await {
+                                return Ok::<HttpResponse, actix_web::Error>(
+                                    HttpResponse::Unauthorized().json(serde_json::json!({
+                                        "error": e.to_string()
+                                    })),
+                                );
+                            }
+                        }
+
+                        // Call handler directly - multipart processing happens on the same task
+                        match handler(ctx, multipart).await {
                             Ok(response) => Ok(response),
                             Err(e) => {
                                 Ok(HttpResponse::InternalServerError().json(serde_json::json!({

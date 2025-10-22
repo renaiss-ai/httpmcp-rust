@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-01-22
+
+### Added
+- **Multipart File Upload Support**: New `.multipart_endpoint()` builder method for handling file uploads
+- `MultipartEndpointHandler` type for processing multipart/form-data requests
+- Support for CSV and other file uploads through actix-multipart integration
+- `multipart_upload.rs` example demonstrating file upload handling and CSV parsing
+- Multipart endpoints process streams on the same task to avoid Send trait issues
+
+### Changed
+- Added `actix-multipart = "0.7"` dependency
+- Updated handler types to support non-Send futures for multipart processing
+- Enhanced README with multipart upload documentation and examples
+
+### Technical Details
+- Multipart handlers return non-Send futures since `Multipart` contains `Rc<RefCell<...>>`
+- File processing happens immediately in the handler to avoid thread-safety issues
+- OAuth validation works seamlessly with multipart endpoints
+
 ## [0.1.3] - 2025-01-22
 
 ### Added

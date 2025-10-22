@@ -18,6 +18,7 @@ A **fast** and **simple** Rust library for building MCP (Model Context Protocol)
 - ✅ **Extensible** - Easy to add custom resources, tools, and prompts
 - ✅ **Full MCP Support** - All protocol features (resources, tools, prompts, logging)
 - ✅ **Custom HTTP Endpoints** - Add REST API endpoints on the same port as MCP
+- ✅ **Multipart File Uploads** - Handle file uploads with `.multipart_endpoint()`
 - ✅ **Headers & Context** - Access request headers, remote IP, request ID
 - ✅ **Middleware** - Built-in CORS and OAuth 2.0 configuration
 - 🚧 **Beta Features** - SSE resumption, OAuth validation (in development)
@@ -216,7 +217,7 @@ async fn code_review_prompt(
 }
 ```
 
-#### Custom HTTP Endpoint Handlers
+#### Custom HTTP Endpoint Handlers (JSON)
 
 Add REST API endpoints alongside MCP protocol on the same port:
 
@@ -262,16 +263,88 @@ async fn main() -> std::io::Result<()> {
 }
 ```
 
+#### Multipart File Upload Endpoints
+
+Handle file uploads using multipart/form-data:
+
+```rust
+use httpmcp_rust::{EndpointMeta, HttpMcpServer, RequestContext};
+use actix_multipart::Multipart;
+use actix_web::HttpResponse;
+use futures::stream::StreamExt;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
+    HttpMcpServer::builder()
+        .name("upload-server")
+        .version("1.0.0")
+        .multipart_endpoint(
+            EndpointMeta::new()
+                .route("/upload")
+                .method("POST")
+                .description("Upload CSV file"),
+            |_ctx: RequestContext, multipart: Multipart| {
+                async move {
+                    let mut multipart = multipart;
+                    let mut file_contents = Vec::new();
+                    let mut filename = String::from("unknown");
+
+                    // Process multipart form fields
+                    while let Some(field) = multipart.next().await {
+                        let mut field = field.map_err(|e| {
+                            httpmcp_rust::McpError::InvalidParams(format!("Multipart error: {}", e))
+                        })?;
+
+                        // Get filename
+                        if let Some(content_disposition) = field.content_disposition() {
+                            if let Some(fname) = content_disposition.get_filename() {
+                                filename = fname.to_string();
+                            }
+                        }
+
+                        // Read field data
+                        while let Some(chunk) = field.next().await {
+                            let data = chunk.map_err(|e| {
+                                httpmcp_rust::McpError::InvalidParams(format!("Chunk error: {}", e))
+                            })?;
+                            file_contents.extend_from_slice(&data);
+                        }
+                    }
+
+                    // Process file contents
+                    let content = String::from_utf8(file_contents).map_err(|e| {
+                        httpmcp_rust::McpError::InvalidParams(format!("Invalid UTF-8: {}", e))
+                    })?;
+
+                    Ok(HttpResponse::Ok().json(json!({
+                        "success": true,
+                        "filename": filename,
+                        "size_bytes": content.len()
+                    })))
+                }
+            },
+        )
+        .build()?
+        .run("127.0.0.1:8080")
+        .await
+}
+```
+
 Test custom endpoints:
 
 ```bash
 # Health check
 curl http://localhost:8080/health
 
-# POST data
+# POST JSON data
 curl -X POST http://localhost:8080/api/data \
   -H "Content-Type: application/json" \
   -d '{"name": "test"}'
+
+# Upload file
+curl -X POST http://localhost:8080/upload \
+  -F "file=@data.csv"
 
 # MCP protocol still works on /mcp
 curl -X POST http://localhost:8080/mcp \
@@ -435,6 +508,11 @@ curl -X POST http://localhost:8080/mcp \
 - Health check, user list, data creation endpoints
 - Shows how to mix MCP protocol with custom REST APIs on the same port
 
+**5. Multipart Upload Example** (`multipart_upload.rs`)
+- File upload handling with multipart/form-data
+- CSV file processing and parsing
+- Demonstrates `.multipart_endpoint()` usage
+
 ### Run Examples
 
 ```bash
@@ -449,6 +527,9 @@ cargo run --example travel_planner
 
 # Endpoint example (custom REST API + MCP)
 cargo run --example endpoint_example
+
+# Multipart upload example
+cargo run --example multipart_upload
 
 # Test travel planner with automated suite
 ./examples/travel_planner_test.sh
